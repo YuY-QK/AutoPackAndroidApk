@@ -71,7 +71,24 @@ android {
             ]
         }
 
+        //---------- 测试【测试环境包】
+        inntest {
+            minifyEnabled false
+            debuggable true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+            //此配置是为了匹配哪个环境
+            matchingFallbacks = ['release']
+            manifestPlaceholders = [
+                    FIR_APPID         : "${project.FIR_APPID_DEBUG}",
+                    FIR_API_TOKEN     : "${project.FIR_API_TOKEN_DEBUG}",
+                    PYGER_UKEY        : "${project.PYGER_UKEY_DEBUG}",
+                    PYGER_API_KEY     : "${project.PYGER_API_KEY_DEBUG}",
+                    APK_UPLOAD_LOG    : "测试",
+            ]
+        }
 
+        //---------- 生产【发布上线】
         release {
             minifyEnabled true
             zipAlignEnabled true
