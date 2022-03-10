@@ -1,0 +1,47 @@
+
+def separator = File.separator
+
+def apkBuildPath = "${project.buildDir}${separator}outputs${separator}apk${separator}"
+def packApkRootPath = "${project.rootDir}${separator}zz_packapk${separator}"
+
+def packPath = "${packApkRootPath}pack${separator}"
+def channelPath = "${packApkRootPath}multichannel_package${separator}"
+def channelPath_exc = "${packApkRootPath}multichannel_package"
+def jiaguPath = "${packApkRootPath}jiagu360${separator}"
+
+def changelogPath = "${packPath}${separator}apk_changelog"
+
+static def getGitUserName() {
+    return 'git config user.name'.execute().text.trim()
+}
+
+ext {
+    TASK_DEPEND = "assemble"
+
+    //fir，pgyer
+    UPLOAD_TARGET = "pgyer"
+
+    PACK_APK_USER = "打包帅哥：${getGitUserName()}"
+
+    FILE_SEPARATOR = separator
+
+    PATH_BUILD = apkBuildPath
+    PATH_ROOT = packApkRootPath
+    PATH_PACK = packPath
+    PATH_CHANNEL = channelPath
+    PATH_CHANNEL_LOG = changelogPath
+
+    REINFORCE_NAME = "${project.REINFORCE_NAME}" //360加固账号
+    REINFORCE_PASSWORD = "${project.REINFORCE_PASSWORD}" //360加固密码
+
+    JIAGU_ROOT = jiaguPath  //加固根目录
+    REINFORCE_JAVA = "${jiaguPath}/jiagu/java" //加固的java文件命令目录
+    REINFORCE_JAR = "${jiaguPath}/jiagu/jiagu.jar" //加固命令jar
+    OUT_APK_PATH = channelPath_exc  // 加固后apk输出路径
+    OUT_APK_NAME = "app-release.apk"// 加固后apk名称
+
+    SIGNING_STORE_FILE = project.SIGNING_RELEASE_STORE_FILE
+    SIGNING_KEY_ALIAS = project.SIGNING_RELEASE_KEY_ALIAS
+    SIGNING_STORE_PASSWORD = project.SIGNING_RELEASE_STORE_PASSWORD
+    SIGNING_KEY_PASSWORD = project.SIGNING_RELEASE_KEY_PASSWORD
+}

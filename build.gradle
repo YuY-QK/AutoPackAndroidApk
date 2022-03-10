@@ -1,0 +1,24 @@
+apply from: "config.gradle"
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+        jcenter()
+
+        maven { url "https://jitpack.io" }
+
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:7.0.3"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.5.20"
+
+        //walle打包工具:https://github.com/Meituan-Dianping/walle/tree/master
+        classpath 'com.meituan.android.walle:plugin:1.1.6'
+
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

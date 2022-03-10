@@ -1,0 +1,200 @@
+apply from: "../zz_packapk/pack/apk_config.gradle"
+/**
+ * 生成上传到 https://www.pgyer.com/ 任务
+ */
+afterEvaluate {
+    android.applicationVariants.each { variant ->
+        String variantName = variant.name.capitalize()
+        if (variantName.endsWith("Debug")) {
+            return
+        }
+
+        def task = tasks.create("apkUpload_${variantName}")
+        task.group = "apk_pack"
+        //依赖打包
+        task.dependsOn("${TASK_DEPEND}${variantName}")
+
+        def flavorDir = ""
+        if (variant.flavorName!="") {
+            flavorDir = variant.flavorName + FILE_SEPARATOR
+        }
+
+        task.doLast {
+            def currentBuildType = variant.buildType
+            def changeLogPath = new File(PATH_CHANNEL_LOG).path
+            def apkFileDir = new File("${PATH_BUILD}${flavorDir}${variant.buildType.name}")
+            def uploadFile = findApkFile(apkFileDir)
+            if (uploadFile==null || !uploadFile.exists()) {
+                throw new GradleException("Could not find apk!")
+            }
+            println("*********** start: uploadFile:${uploadFile.path} ******")
+            if (variant.flavorName!="") {
+                flavorDir = variant.flavorName + FILE_SEPARATOR
+            } else {
+                flavorDir = "main${FILE_SEPARATOR}"
+            }
+
+            def uploadPyName = ""
+            def msgPyName = ""
+            def appId = ""
+            def apiToken = ""
+            if (UPLOAD_TARGET == "fir") {
+                uploadPyName = "apk_upload_firim.py"
+                msgPyName = "apk_upload_wxpush.py"
+                appId = currentBuildType.getManifestPlaceholders()["FIR_APPID"]
+                apiToken = currentBuildType.getManifestPlaceholders()["FIR_API_TOKEN"]
+            } else {
+                uploadPyName = "apk_upload_pgyer.py"
+                msgPyName = "apk_upload_wxpush_code.py"
+                appId = currentBuildType.getManifestPlaceholders()["PYGER_UKEY"]
+                apiToken = currentBuildType.getManifestPlaceholders()["PYGER_API_KEY"]
+            }
+            uploadApk(
+                    uploadPyName,
+                    PATH_PACK,
+                    uploadFile,
+                    new File(project.projectDir, "src${FILE_SEPARATOR}" + flavorDir + "res${FILE_SEPARATOR}mipmap-xxhdpi${FILE_SEPARATOR}ic_launcher.png"),
+                    project.android.defaultConfig.getResValues().get("app_name").getValue(),
+                    appId,
+                    apiToken,
+                    currentBuildType.getManifestPlaceholders()["APK_UPLOAD_LOG"],
+                    changeLogPath
+            )
+
+            sendMsg(msgPyName, PATH_PACK)
+
+            println("*********** end: uploadFile ******")
+        }
+    }
+
+}
+
+/**
+ * 查找apk文件
+ * @param apkFile
+ * @return
+ */
+static def findApkFile(File apkFile) {
+    def files = apkFile.listFiles()
+    for (int i = 0; i < files.length; i++) {
+        if (files[i].name.endsWith(".apk")) {
+            return files[i]
+        }
+    }
+    return null
+}
+
+/*
+//这种方式可能导致找到AndResGuard_app_vx.x.x_release目录下的apk，就不对了
+def findApkFile(File apkFile) {
+    if (apkFile.name.endsWith(".apk")) {
+        return apkFile
+    } else if (apkFile.isDirectory()) {
+        def files = apkFile.listFiles()
+        for (int i = 0; i < files.length; i++) {
+            def findFile = findApkFile(files[i])
+            if (findFile != null) {
+                return findFile
+            }
+        }
+    } else {
+        return null
+    }
+}*/
+
+/**
+ * 打印python的日志
+ * @param process
+ */
+def printPyLog(process) {
+    //打印Python脚本日志，便于出错调试
+    ByteArrayOutputStream result = new ByteArrayOutputStream()
+    def inputStream = process.getInputStream()
+    byte[] buffer = new byte[1024]
+    int length
+    while ((length = inputStream.read(buffer)) != -1) {
+        result.write(buffer, 0, length)
+    }
+    println(result.toString("utf-8"))
+
+}
+
+/**
+ * 上传apk到fir.im / pyger
+ * @param uploadPY
+ * @param uploadApkFile
+ * @param logoFile
+ * @param appName
+ * @param appId：fir的APPID，pgyer的uKey
+ * @param apiToken：fir的APIToken，pgyer的_api_key
+ * @param apkUploadLog
+ * @return
+ */
+def uploadApk(String uploadPY,
+        String packPath, File uploadApkFile, File logoFile, String appName,
+        String appId, String apiToken, String changeLogPre, String apkLogPath) {
+    //调用python脚本  这个脚本需要放在app工程目录下，不要放在project目录下
+    def changeLog = appName + "APP(Android" + changeLogPre + "环境包)"
+    /*
+    在app目录下可以这么操作，因为运行任务时，是在app目录下运行的
+    def processStr = "python3 apk_upload_firim.py " +
+            appName + " " +
+            project.android.defaultConfig.applicationId + " " +
+            project.android.defaultConfig.versionName + " " +
+            project.android.defaultConfig.versionCode + " " +
+            appId + " " +
+            apiToken + " " +
+            logoFile + " " +
+            uploadApkFile + " " +
+            changeLog + " " +
+            apkLogPath
+    def process = processStr.execute()
+    printPyLog(process)
+    */
+    exec {
+        //进入到python脚步目录下
+        workingDir "${packPath}"
+        commandLine 'cd'
+
+        //调用python脚本
+        commandLine "python3",
+                uploadPY,
+                appName,
+                project.android.defaultConfig.applicationId,
+                project.android.defaultConfig.versionName,
+                project.android.defaultConfig.versionCode,
+                appId,
+                apiToken,
+                logoFile,
+                uploadApkFile,
+                changeLog,
+                apkLogPath
+    }
+
+}
+
+
+def sendMsg(String pyName, String packPath) {
+    println("*********** send upload message ******")
+    def key = project.QYWX_WEBHOOK_KEY
+    def testPhone = project.QYWX_WEBHOOK_AT_TESTPHONE
+    File apkLogFile = new File("${PATH_CHANNEL_LOG}_${project.android.defaultConfig.versionCode}")
+    /*
+    def process = "python3 apk_upload_wxpush.py ${key} ${apkLogFile} ${testPhone}".execute()
+    printPyLog(process)
+    */
+    exec {
+        //进入到python脚步目录下
+        workingDir "${packPath}"
+        commandLine 'cd'
+
+        //调用python脚本
+        commandLine "python3",
+                pyName,
+                key,
+                apkLogFile,
+                testPhone,
+                PACK_APK_USER
+    }
+
+}

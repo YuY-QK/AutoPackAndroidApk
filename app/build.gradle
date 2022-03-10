@@ -1,0 +1,182 @@
+plugins {
+    id 'com.android.application'
+    id 'kotlin-android'
+    id 'kotlin-kapt'
+    id 'kotlin-android-extensions'
+
+    id 'walle'
+}
+
+def packPath = '../zz_packapk/pack'
+//apk上传fir
+apply from: "${packPath}/apk_upload.gradle"
+//apk进行360加固
+apply from: "${packPath}/apk_firm.gradle"
+//apk进行多渠道打包
+apply from: "${packPath}/apk_channel.gradle"
+
+//flutter编译
+//apply from: "../zz_commandline/flutter_build.gradle"
+
+android {
+    compileSdkVersion rootProject.ext.android["compileSdkVersion"]
+    buildToolsVersion rootProject.ext.android["buildToolsVersion"]
+
+    defaultConfig {
+        applicationId "com.yuy.autopack"
+        minSdkVersion rootProject.ext.android["minSdkVersion"]
+        targetSdkVersion rootProject.ext.android["targetSdkVersion"]
+        versionCode rootProject.ext.android["versionCode"]
+        versionName rootProject.ext.android["versionName"]
+
+        //应用名称，这里配置了，就不要在string.xml中配置了
+        resValue "string", "app_name", "自动打包"
+    }
+
+    signingConfigs {
+
+        debug {
+            keyAlias
+            keyPassword
+            storeFile
+            storePassword
+            v1SigningEnabled true
+            v2SigningEnabled true
+        }
+
+        release {
+            keyAlias
+            keyPassword
+            storeFile
+            storePassword
+            v1SigningEnabled true
+            v2SigningEnabled true
+        }
+    }
+
+    buildTypes {
+        //---------- debug环境
+        debug {
+            minifyEnabled false
+            debuggable true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+
+            manifestPlaceholders = [
+                    FIR_APPID : "${project.FIR_APPID_DEBUG}",
+                    FIR_API_TOKEN : "${project.FIR_API_TOKEN_DEBUG}",
+                    PYGER_UKEY : "${project.PYGER_UKEY_DEBUG}",
+                    PYGER_API_KEY : "${project.PYGER_API_KEY_DEBUG}",
+                    APK_UPLOAD_LOG : "DEBUG",
+            ]
+        }
+
+
+        release {
+            minifyEnabled true
+            zipAlignEnabled true
+            shrinkResources true
+            debuggable false
+            signingConfig signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            manifestPlaceholders = [
+                    FIR_APPID         : "${project.FIR_APPID_RELEASE}",
+                    FIR_API_TOKEN     : "${project.FIR_API_TOKEN_RELEASE}",
+                    PYGER_UKEY        : "${project.PYGER_UKEY_RELEASE}",
+                    PYGER_API_KEY     : "${project.PYGER_API_KEY_RELEASE}",
+                    APK_UPLOAD_LOG    : "生产上线",
+            ]
+
+            // 开启 dex 分包
+            //multiDexEnabled true
+            // 设置将需要保存至主dex的文件
+            //multiDexKeepFile file('keep/keep_in_main_dex.txt')
+        }
+    }
+
+    //配置打包签名
+    configSign()
+
+    dexOptions {
+        // 可以使用 "dx --help" 进行查看
+        // 例如：dex 的 分包 [--multi-dex [--main-dex-list=<file> [--minimal-main-dex]]
+        // dex 的 分包需要达到65，而如果设置了--minimal-main-dex ，则会让 proguardFile 设置的文件放进主dex文件
+        // 1. multiDexEnabled --> --multi-dex
+        // 2. proguardFile --> --main-dex-list=<file>
+
+        //additionalParameters '--minimal-main-dex'
+
+        // 设置运行内存
+        javaMaxHeapSize '2048m'
+
+        // 大模式
+        jumboMode true
+
+        // 是否保存 被运行时注解的类 保存至主dex
+        keepRuntimeAnnotatedClasses false
+
+        // 最大进程数 默认为4
+        maxProcessCount 4
+
+        // 线程数
+        threadCount 4
+
+        // 预编译 dex lib，在我们build的时候会快些，但clean时便会慢，默认开启
+        preDexLibraries true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    lintOptions {
+        abortOnError false
+    }
+
+    //修改一下包名的格式
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            def apkName = "Auto_v${defaultConfig.versionName}_${variant.buildType.name}"
+            outputFileName = apkName + ".apk"
+        }
+    }
+}
+
+
+/**
+ * 配置打包签名
+ * @return
+ */
+def configSign() {
+    android.signingConfigs.debug.storeFile = file(project.SIGNING_DEBUG_STORE_FILE)
+    android.signingConfigs.debug.storePassword = project.SIGNING_DEBUG_STORE_PASSWORD
+    android.signingConfigs.debug.keyAlias = project.SIGNING_DEBUG_KEY_ALIAS
+    android.signingConfigs.debug.keyPassword = project.SIGNING_DEBUG_KEY_PASSWORD
+
+    android.signingConfigs.release.storeFile = file(project.SIGNING_RELEASE_STORE_FILE)
+    android.signingConfigs.release.storePassword = project.SIGNING_RELEASE_STORE_PASSWORD
+    android.signingConfigs.release.keyAlias = project.SIGNING_RELEASE_KEY_ALIAS
+    android.signingConfigs.release.keyPassword = project.SIGNING_RELEASE_KEY_PASSWORD
+}
+
+walle {
+    // 指定渠道包的输出路径
+    apkOutputFolder = new File("${project.buildDir}/outputs/channels")
+    // 定制渠道包的APK的文件名称
+    apkFileNameFormat = '${appName}-${packageName}-${channel}-${buildType}-v${versionName}-${versionCode}-${buildTime}.apk'
+    // 渠道配置文件
+    channelFile = new File("${project.getRootDir()}/channel")
+}
+
+dependencies {
+    implementation rootProject.ext.dependencies["core"]
+    implementation rootProject.ext.dependencies["material"]
+    implementation rootProject.ext.dependencies["appcompat"]
+
+    implementation rootProject.ext.dependencies["multidex"]
+    implementation rootProject.ext.dependencies["walle"]
+}

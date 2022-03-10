@@ -1,0 +1,129 @@
+apply from: "../zz_packapk/pack/apk_config.gradle"
+
+/**
+ * 生成多渠道包任务
+ */
+afterEvaluate {
+    android.applicationVariants.each { variant ->
+        String variantName = variant.name.capitalize()
+        if (!variantName.endsWith("Release")) {
+            return
+        }
+
+
+        def task = tasks.create("apkChannel_${variantName}")
+        task.group = "apk_pack"
+        //依赖加固任务
+        task.dependsOn("apkFirm_${variantName}")
+
+        task.doLast {
+            def apkFile = new File("${PATH_CHANNEL}app-release.apk")
+            if (apkFile==null || !apkFile.exists()) {
+                throw new GradleException("Could not find apk!")
+            }
+            //获取sdkBuildToolPath
+            Properties properties = new Properties()
+            File localPath = project.rootProject.file('local.properties')
+            InputStream inputStream = localPath.newDataInputStream()
+            properties.load(inputStream)
+
+            def sdkBuildToolPath = properties.getProperty("sdk.dir") + "/build-tools/30.0.3"
+            if (sdkBuildToolPath==null || sdkBuildToolPath=="") {
+                throw new GradleException("Could not find sdkBuildToolPath，please sure 'sdk.dir' in ${localPath.path}!")
+            }
+
+            channelApk(
+                    SIGNING_STORE_FILE,
+                    SIGNING_KEY_ALIAS,
+                    SIGNING_STORE_PASSWORD,
+                    SIGNING_KEY_PASSWORD,
+                    sdkBuildToolPath
+            )
+
+            deleteApk(apkFile.path)
+
+            sendChannelMsg(PATH_PACK)
+
+        }
+    }
+
+}
+
+/**
+ * 多渠道打包
+ */
+def channelApk(storeFilePath, alias, storePassword, keyPassword, sdkBuildToolPath) {
+    println("*********** start channel ***********")
+    def channelExecDir = PATH_CHANNEL
+    def storeFile = file(storeFilePath).path
+    exec {
+        //进入到python脚步目录下
+        workingDir "${channelExecDir}"
+        commandLine 'cd'
+
+        //调用python脚本
+        commandLine "python3", "ApkResigner.py", storeFile, alias, storePassword, keyPassword, sdkBuildToolPath
+    }
+
+    //删除临时文件，类似80f63b4901f341110d99fc196441c41630ca99d9
+    def channelFile = file(channelExecDir)
+    def files = channelFile.listFiles()
+    for (int i = 0; i < files.length; i++) {
+        if (files[i].name.length()>30 && files[i].name.matches("[a-zA-Z0-9]+")) {
+            files[i].delete()
+        }
+    }
+
+    println("channelDir::${channelExecDir}channels/")
+    println("*********** end channel ******")
+}
+
+def deleteApk(apkFilePath) {
+    FileTree tree = fileTree(apkFilePath)
+    tree.visit {
+        element ->
+            if(element.getName().endsWith(".apk")){
+                println("delete: ${element.getName()}")
+                delete element.file
+            }
+    }
+}
+
+/**
+ * 渠道包生成消息发送
+ * @param packPath
+ * @return
+ */
+def sendChannelMsg(String packPath) {
+    println("*********** send channel message ******")
+    def key = project.QYWX_WEBHOOK_KEY
+    def submitPhone = project.QYWX_WEBHOOK_AT_SUBMITPHONE
+    def sendContent = new String(project.QYWX_WEBHOOK_CHANNELTIP.getBytes("iso8859-1"), "UTF-8")
+    def appName = project.android.defaultConfig.getResValues().get("app_name").getValue()
+    def versionName = project.android.defaultConfig.versionName
+    def versionCode = project.android.defaultConfig.versionCode
+    def logFilePath = new File(PATH_CHANNEL_LOG).path
+
+    /*
+    def process = "python3 apk_upload_wxpush.py ${key} ${apkLogFile} ${testPhone}".execute()
+    printPyLog(process)
+    */
+    exec {
+        //进入到python脚步目录下
+        workingDir "${packPath}"
+        commandLine 'cd'
+
+        //调用python脚本
+        commandLine "python3",
+                "apk_channel_wxpush.py",
+                key,
+                submitPhone,
+                sendContent,
+                appName,
+                versionName,
+                versionCode,
+                logFilePath,
+                PACK_APK_USER
+    }
+
+}

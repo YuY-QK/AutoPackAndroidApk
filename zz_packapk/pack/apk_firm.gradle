@@ -1,0 +1,73 @@
+apply from: "../zz_packapk/pack/apk_config.gradle"
+
+/**
+ * 生成加固任务
+ */
+afterEvaluate {
+    android.applicationVariants.each { variant ->
+        String variantName = variant.name.capitalize()
+        if (!variantName.endsWith("Release")) {
+            return
+        }
+
+        def flavorDir = ""
+        if (variant.flavorName!="") {
+            flavorDir = variant.flavorName + FILE_SEPARATOR
+        }
+
+        def task = tasks.create("apkFirm_${variantName}")
+        task.group = "apk_pack"
+        //依赖打包
+        task.dependsOn("${TASK_DEPEND}${variantName}")
+
+        task.doLast {
+            def apkFileDir = new File("${PATH_BUILD}${flavorDir}${variant.buildType.name}")
+            def apkFirmFile = findApkFile(apkFileDir)
+            if (apkFirmFile==null || !apkFirmFile.exists()) {
+                throw new GradleException("Could not find apk!")
+            }
+            def firmedApkFile = firmApk(apkFirmFile)
+            println("*********** end: firmFile:${firmedApkFile.path}")
+        }
+    }
+
+}
+
+/**
+ * 查找apk文件
+ * @param apkFile
+ * @return
+ */
+static def findApkFile(File apkFile) {
+    def files = apkFile.listFiles()
+    for (int i = 0; i < files.length; i++) {
+        if (files[i].name.endsWith(".apk")) {
+            return files[i]
+        }
+    }
+    return null
+}
+
+/**
+ * 加固
+ */
+def firmApk(File apkFirmFile) {
+    println("*********** start: firmFile:${apkFirmFile.name}")
+    exec {
+        println "apk login by : ${REINFORCE_NAME}"
+
+        //进到加固目录，方便下面的执行java命令
+        commandLine "bash", "-c", "cd ${REINFORCE_JAVA}"
+
+        // 登录
+        commandLine "bash", "-c", "java -jar ${REINFORCE_JAR} -login ${REINFORCE_NAME} ${REINFORCE_PASSWORD}"
+
+        println("*********** firming... ******")
+        // 加固apk
+        commandLine "bash", "-c", "java -jar ${REINFORCE_JAR} -jiagu ${apkFirmFile.path} ${OUT_APK_PATH}"
+    }
+    def firmFile = findApkFile(file(OUT_APK_PATH))
+    def outFirmFile = new File(OUT_APK_PATH, OUT_APK_NAME)
+    firmFile.renameTo(outFirmFile)
+    return outFirmFile
+}

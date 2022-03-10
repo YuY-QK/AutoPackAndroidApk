@@ -1,0 +1,56 @@
+
+def separator = File.separator
+
+
+/**
+ * fultter编译任务
+ */
+def flutterTask = tasks.create("flutter_build")
+flutterTask.group = "flutter_build"
+
+def path = "${project.rootDir.getParentFile().path}${separator}qxbflutter"
+
+flutterTask.doLast {
+    orderCommand(path, "clean", "")
+    orderCommand(path, "pub", "get")
+    orderCommand(path, "build", "aar")
+}
+
+/**
+ * 渠道包生成消息发送
+ * @param packPath
+ * @return
+ */
+def orderCommand(String path, String commName1, String commName2) {
+    /*
+    def process = "python3 apk_upload_wxpush.py ${key} ${apkLogFile} ${testPhone}".execute()
+    printPyLog(process)
+    */
+
+    exec {
+        //进入到目录下
+        workingDir "${path}"
+        commandLine 'cd'
+
+        //调用flutter命令
+        commandLine "flutter", commName1, commName2
+    }
+
+}
+
+//编译前先build一下flutter
+preBuild.dependsOn("flutter_build")
+
+//运行的时候，不执行flutter_build命令
+this.gradle.addListener(new TaskExecutionGraphListener() {
+    @Override
+    void graphPopulated(TaskExecutionGraph taskExecutionGraph) {
+        taskExecutionGraph.allTasks.forEach{
+            if (it.name == "assembleDebug") {
+                flutter_build.enabled(false)
+            } else {
+                flutter_build.enabled(true)
+            }
+        }
+    }
+})
